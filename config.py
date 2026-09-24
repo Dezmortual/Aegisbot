@@ -31,6 +31,13 @@ FILTER = os.environ.get("FILTER", "HULL")               # NO-FILTER | SUPERTREND
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
+# --- data source ---
+# "auto" tries yfinance first, then falls back to Twelve Data if a key is set.
+# Set to "twelvedata" to use it as the primary source (recommended on Render:
+# Yahoo Finance frequently rate-limits/blocks shared cloud-host IPs).
+DATA_PROVIDER = os.environ.get("DATA_PROVIDER", "auto")
+TWELVEDATA_API_KEY = os.environ.get("TWELVEDATA_API_KEY", "")
+
 # --- risk & exit management (tuned via 5y backtests, see README) ---
 BREAKEVEN_AT_R = _f("BREAKEVEN_AT_R", 1.0)        # move stop to entry at +1R profit (0 = off)
 EXIT_ON_BASELINE = _b("EXIT_ON_BASELINE", "true") # exit when close crosses back through baseline

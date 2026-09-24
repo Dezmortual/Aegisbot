@@ -49,7 +49,9 @@ _strat = ssl_hybrid.SSLHybrid(config.STRATEGY_PARAMS)
 def refresh():
     global _last_alert_key
     try:
-        df = data_mod.fetch(config.SYMBOL, config.PERIOD, config.INTERVAL)
+        df = data_mod.fetch(config.SYMBOL, config.PERIOD, config.INTERVAL,
+                            provider=config.DATA_PROVIDER,
+                            twelvedata_key=config.TWELVEDATA_API_KEY)
         if len(df) < 120:
             raise RuntimeError(f"Only {len(df)} bars fetched - not enough history")
         sdf = _strat.compute(df)
@@ -126,10 +128,13 @@ def refresh():
                 _last_alert_key = key
                 _notify(f"AEGIS FX {config.SYMBOL} [{config.MODE}]: {alert_sig} signal "
                         f"@ {round(last['close'], 6)} (strength {int(last['strength'])}/11)")
+        return True
     except Exception as e:  # noqa: BLE001 - surface any failure to the dashboard
         with LOCK:
-            STATE["error"] = f"{type(e).__name__}: {e}"
+            STATE["error"] = str(e)
+            STATE["updated_at"] = datetime.now(timezone.utc).isoformat()
         print(f"[aegis-fx] refresh failed: {e}", flush=True)
+        return False
 
 
 def _r6(x):
@@ -173,8 +178,21 @@ def dashboard():
 @app.route("/api/status")
 def api_status():
     with LOCK:
-        return jsonify(STATE["status"] if STATE["ready"] else
-                       {"ready": False, "error": STATE["error"]})
+        if STATE["ready"]:
+            return jsonify(STATE["status"])
+        return jsonify({"ready": False, "error": STATE["error"],
+                        "updated_at": STATE["updated_at"],
+                        "provider": config.DATA_PROVIDER,
+                        "symbol": config.SYMBOL})
+
+
+@app.route("/api/refresh", methods=["POST", "GET"])
+def api_refresh():
+    """Manual trigger - lets the dashboard's Retry button force an immediate refresh
+    instead of waiting for the scheduled job."""
+    ok = refresh()
+    with LOCK:
+        return jsonify({"ok": ok, "ready": STATE["ready"], "error": STATE["error"]})
 
 
 @app.route("/api/candles")
@@ -208,10 +226,25 @@ def healthz():
 
 # ------------------------------------------------------------------ startup
 scheduler = BackgroundScheduler(daemon=True)
-scheduler.add_job(refresh, "interval", hours=max(1, int(config.REFRESH_HOURS)),
-                  next_run_time=datetime.now(timezone.utc))
+scheduler.add_job(refresh, "interval", hours=max(1, int(config.REFRESH_HOURS)))
 scheduler.start()
 
+def _startup_retry():
+    """First refresh often fails on cloud hosts due to Yahoo rate-limiting a
+    fresh IP; retry quickly (not once every REFRESH_HOURS) until it succeeds."""
+    delay = 15
+    while True:
+        with LOCK:
+            already_ready = STATE["ready"]
+        if already_ready:
+            return
+        if refresh():
+            return
+        time.sleep(delay)
+        delay = min(delay * 2, 300)
+
+
+threading.Thread(target=_startup_retry, daemon=True).start()
 threading.Thread(target=_keepalive, daemon=True).start()
 
 if __name__ == "__main__":

@@ -17,3 +17,7 @@ services:
         value: SSL-HYBRID
       - key: FILTER
         value: HULL
+      - key: DATA_PROVIDER
+        value: auto
+      - key: TWELVEDATA_API_KEY
+        sync: false

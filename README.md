@@ -71,8 +71,32 @@ git push -u origin main
 - Render free web services sleep after 15 min without traffic. The bot includes a
   **keep-alive thread** that pings its own public URL every 10 minutes (uses
   `RENDER_EXTERNAL_URL`, which Render sets automatically), so your scheduler keeps running.
-- Even if it does sleep: on wake it re-simulates the full history from yfinance, so no
-  trades or signals are ever missed.
+- Even if it does sleep: on wake it re-simulates the full history, so no trades or
+  signals are ever missed.
+
+### ⚠️ "Waiting for data..." / no data on Render - read this
+
+Yahoo Finance (which the free `yfinance` library scrapes) aggressively rate-limits
+or outright blocks requests coming from shared cloud-host IP ranges - Render, Heroku
+and Railway all report this constantly. It usually still works locally because your
+home IP isn't blocked. The bot already:
+- uses a browser-impersonating session (`curl_cffi`) to reduce 429 errors,
+- retries with backoff instead of giving up after one failed request,
+- shows the **exact error** in a red banner on the dashboard with a **Retry now**
+  button, instead of spinning forever.
+
+If it's still failing after a few retries, the fix is a free fallback data source:
+
+1. Sign up at [twelvedata.com](https://twelvedata.com) (free, no card, ~2 minutes)
+   and copy your API key.
+2. In Render → your service → **Environment**, add:
+   - `TWELVEDATA_API_KEY` = your key
+3. Redeploy (or just wait - the bot will auto-recover on its next retry / on you
+   clicking **Retry now** on the dashboard).
+
+With `TWELVEDATA_API_KEY` set, the bot automatically falls back to Twelve Data any
+time yfinance fails - no code changes needed. Set `DATA_PROVIDER=twelvedata` instead
+of `auto` if you'd rather use it as the primary source from the start.
 
 ## 5. Configuration (environment variables)
 
@@ -90,6 +114,8 @@ git push -u origin main
 | `ADX_ENTRY_MIN` | `20` | Block new entries when ADX < this (0 = off) |
 | `TRAIL_ATR` | `0` | Optional trailing stop at N·ATR from best price (0 = off) |
 | `ALLOW_SHORTS` | `true` | Set `false` for long-only trading |
+| `DATA_PROVIDER` | `auto` | `auto` (yfinance, fallback to Twelve Data) · `yfinance` · `twelvedata` |
+| `TWELVEDATA_API_KEY` | *(none)* | Free key from twelvedata.com - fixes Render's data blocking, see above |
 | `MAX_LEVERAGE` | `5.0` | Cap on position notional |
 | `FEE_BPS` | `1.0` | Simulated cost per side, basis points |
 | `MODE` | `SSL-HYBRID` | `SSL-HYBRID` · `SSL+QQE+WAE` · `SSL-HYBRID+SuperTrend` |
