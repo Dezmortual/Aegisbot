@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, make_response, render_template
 
 import config
 import data as data_mod
@@ -172,7 +172,9 @@ def _keepalive():
 # ------------------------------------------------------------------ routes
 @app.route("/")
 def dashboard():
-    return render_template("dashboard.html")
+    resp = make_response(render_template("dashboard.html"))
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    return resp
 
 
 @app.route("/api/status")
