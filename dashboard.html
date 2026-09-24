@@ -234,7 +234,7 @@ const dt=s=>s?new Date(s).toLocaleString("en-GB",{day:"2-digit",month:"short",ye
 let tradesCache=[];
 
 function renderStatus(s){
-  if(!s||!s.ready){return;}
+  if(!s||s.ready===false){return;}
   $("symbol").textContent=s.symbol+" · "+s.interval;
   $("mode-pill").textContent=s.mode+" · "+s.filter;
   $("updated-pill").textContent="updated "+dt(s.bar_time);
@@ -325,7 +325,7 @@ async function loadAll(){
   refreshing=true;
   try{
     const s=await getJSON("/api/status");
-    if(s&&!s.ready){
+    if(!s||s.ready===false){
       const why=s.error?s.error:"Waiting for the first data fetch to complete…";
       showError(why);
       $("signal-sub").textContent="no data yet";

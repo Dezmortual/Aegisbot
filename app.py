@@ -181,7 +181,9 @@ def dashboard():
 def api_status():
     with LOCK:
         if STATE["ready"]:
-            return jsonify(STATE["status"])
+            payload = dict(STATE["status"])
+            payload["ready"] = True
+            return jsonify(payload)
         return jsonify({"ready": False, "error": STATE["error"],
                         "updated_at": STATE["updated_at"],
                         "provider": config.DATA_PROVIDER,
