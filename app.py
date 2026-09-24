@@ -10,6 +10,7 @@ Routes:
   /api/equity     equity curve
   /api/signals    recent signal feed
 """
+import json
 import os
 import threading
 import time
@@ -41,8 +42,29 @@ STATE = {
 LOCK = threading.Lock()
 _last_alert_key = None
 
+_RUNTIME_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime_state.json")
+
+def _load_runtime():
+    try:
+        with open(_RUNTIME_FILE) as f:
+            return json.load(f)
+    except Exception:  # noqa: BLE001 - first boot or ephemeral disk reset
+        return {"trading_enabled": True, "paused_after": None}
+
+def _save_runtime(state):
+    try:
+        with open(_RUNTIME_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception:  # noqa: BLE001
+        pass
+
+RUNTIME = _load_runtime()
+
 # Instantiate the strategy once from config
 _strat = ssl_hybrid.SSLHybrid(config.STRATEGY_PARAMS)
+
+# Brand logo (SSL Hybrid strategy emblem)
+LOGO_URL = "https://media.base44.com/images/public/6ab0c98c5f34f466a41c41ce/0a2a3dcb9_generated_image.png"
 
 
 # ------------------------------------------------------------------ engine run
@@ -67,6 +89,7 @@ def refresh():
             "adx_entry_min": config.ADX_ENTRY_MIN,
             "trail_atr": config.TRAIL_ATR,
             "allow_shorts": config.ALLOW_SHORTS,
+            "paused_after": None if RUNTIME["trading_enabled"] else RUNTIME.get("paused_after"),
         })
 
         # ---- chart payload (last N bars)
@@ -106,6 +129,8 @@ def refresh():
             "position": result["position"],
             "stats": result["stats"],
             "last_signal": last_sig,
+            "trading_enabled": bool(RUNTIME["trading_enabled"]),
+            "logo": LOGO_URL,
         }
 
         with LOCK:
@@ -221,6 +246,20 @@ def api_equity():
 def api_signals():
     with LOCK:
         return jsonify(STATE["signals"])
+
+
+@app.route("/api/trading/toggle", methods=["POST"])
+def api_trading_toggle():
+    """Start/stop button: pause blocks NEW entries; open positions are still
+    managed to their exit. Recomputes the paper account so the dashboard
+    reflects it immediately."""
+    enabled = not RUNTIME["trading_enabled"]
+    RUNTIME["trading_enabled"] = enabled
+    RUNTIME["paused_after"] = None if enabled else datetime.now(timezone.utc).isoformat()
+    _save_runtime(RUNTIME)
+    refresh()
+    with LOCK:
+        return jsonify({"ok": True, "trading_enabled": enabled})
 
 
 @app.route("/healthz")

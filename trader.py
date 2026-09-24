@@ -34,6 +34,11 @@ def simulate(sdf, cfg):
     adx_entry_min = float(p.get("adx_entry_min", 0))      # block new entries when ADX < this (0 = off)
     exit_on_baseline = bool(p.get("exit_on_baseline", False))
     allow_shorts = bool(p.get("allow_shorts", True))
+    paused_after = p.get("paused_after")  # ISO date str: block NEW entries at/after it
+
+    paused_ts = pd.to_datetime(paused_after) if paused_after else None
+    if paused_ts is not None and paused_ts.tzinfo is not None:
+        paused_ts = paused_ts.tz_localize(None)  # bar index is tz-naive
 
     position = None
     trades = []
@@ -44,6 +49,11 @@ def simulate(sdf, cfg):
     max_dd = 0.0
 
     dates = df.index
+
+    def entries_allowed(i):
+        if paused_ts is None:
+            return True
+        return dates[i] < paused_ts
 
     def close_position(i, price, reason):
         nonlocal position, equity
@@ -146,17 +156,20 @@ def simulate(sdf, cfg):
                         close_position(i, row["close"], "BASELINE EXIT")
             # flip on opposite signal
             if position:
-                if position["side"] == "long" and bool(row["signal_dn"]) and allow_shorts:
-                    close_position(i, row["close"], "FLIP")
-                    open_position(i, "short")
+                if position["side"] == "long" and bool(row["signal_dn"]):
+                    close_position(i, row["close"], "FLIP" if (allow_shorts and entries_allowed(i)) else "OPPOSITE SIGNAL")
+                    if allow_shorts and entries_allowed(i):
+                        open_position(i, "short")
                 elif position["side"] == "short" and bool(row["signal_up"]):
-                    close_position(i, row["close"], "FLIP")
-                    open_position(i, "long")
+                    if allow_shorts or entries_allowed(i):
+                        close_position(i, row["close"], "FLIP" if allow_shorts else "OPPOSITE SIGNAL")
+                    if allow_shorts and entries_allowed(i):
+                        open_position(i, "long")
                 elif position["side"] == "long" and bool(row["signal_dn"]) and not allow_shorts:
                     close_position(i, row["close"], "OPPOSITE SIGNAL")
 
         # ---- entries
-        if position is None:
+        if position is None and entries_allowed(i):
             adx_ok = True
             if adx_entry_min > 0:
                 adx_ok = row["adx"] == row["adx"] and row["adx"] >= adx_entry_min
