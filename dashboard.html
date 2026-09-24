@@ -280,7 +280,7 @@ function renderStatus(s){
   }).join("");
   // performance table
   const rows=[["Total P&L",(s.stats.total_pnl>0?"+":"")+fmt(s.stats.total_pnl)+" ("+s.stats.total_pnl_pct+"%)",s.stats.total_pnl],
-    ["Win rate",s.stats.win_rate+"% ("+s.stats.wins+"W / "+s.stats.losses+"L")",null],
+    ["Win rate",s.stats.win_rate+"% ("+s.stats.wins+"W / "+s.stats.losses+"L)",null],
     ["Profit factor",s.stats.profit_factor==null?"—":s.stats.profit_factor,null],
     ["Max drawdown",s.stats.max_drawdown_pct+"%",null],
     ["Trades",s.stats.trades,null],
